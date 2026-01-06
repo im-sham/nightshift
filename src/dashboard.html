@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nightshift Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --border-color: #30363d;
+            --accent: #238636;
+            --accent-hover: #2ea043;
+            --danger: #f85149;
+            --warning: #d29922;
+            --info: #58a6ff;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        h1 {
+            font-size: 1.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        h1 .moon { font-size: 1.5rem; }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .status-running { background: var(--accent); color: white; }
+        .status-completed { background: var(--info); color: white; }
+        .status-failed { background: var(--danger); color: white; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.35rem;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-group input {
+            width: auto;
+        }
+        
+        .btn {
+            padding: 0.6rem 1.25rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-primary:disabled { background: var(--bg-tertiary); cursor: not-allowed; }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+        
+        .stat {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+        
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+        
+        .reports-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .report-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .report-item:last-child { border-bottom: none; }
+        
+        .report-item:hover { background: var(--bg-tertiary); }
+        
+        .report-name {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+        
+        .report-date {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .report-actions a {
+            color: var(--info);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        
+        .report-actions a:hover { text-decoration: underline; }
+        
+        .schedule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .schedule-info { flex: 1; }
+        
+        .schedule-time {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+        
+        .schedule-projects {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .models-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .model-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        
+        .model-available { color: var(--accent); }
+        .model-limited { color: var(--warning); }
+        
+        .log-output {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow-y: auto;
+            color: var(--text-secondary);
+        }
+        
+        .log-entry {
+            margin-bottom: 0.25rem;
+        }
+        
+        .log-time { color: var(--text-secondary); }
+        .log-message { color: var(--text-primary); }
+        
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+        
+        .full-width { grid-column: 1 / -1; }
+        
+        .refresh-indicator {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-overlay.active { display: flex; }
+        
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            width: 400px;
+            max-width: 90%;
+        }
+        
+        .modal h3 {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><span class="moon">🌙</span> Nightshift Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <span class="refresh-indicator">Auto-refresh: <span id="countdown">5</span>s</span>
+                <span id="statusBadge" class="status-badge status-idle">Idle</span>
+            </div>
+        </header>
+        
+        <div class="grid">
+            <div class="card">
+                <h2>Start New Run</h2>
+                <form id="startForm">
+                    <div class="form-group">
+                        <label>Projects (comma-separated)</label>
+                        <input type="text" id="projects" value="opsorchestra, ghost-sentry" placeholder="project1, project2">
+                    </div>
+                    <div class="form-group">
+                        <label>Duration (hours)</label>
+                        <input type="number" id="duration" value="8" min="1" max="24" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>Priority Mode</label>
+                        <select id="priorityMode">
+                            <option value="balanced">Balanced</option>
+                            <option value="security_first">Security First</option>
+                            <option value="research_heavy">Research Heavy</option>
+                            <option value="quick_scan">Quick Scan</option>
+                        </select>
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="createIssues">
+                        <label for="createIssues" style="margin: 0;">Auto-create GitHub issues for critical findings</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Slack Webhook (optional)</label>
+                        <input type="text" id="slackWebhook" placeholder="https://hooks.slack.com/...">
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" id="startBtn" class="btn btn-primary">Start Run</button>
+                        <button type="button" id="stopBtn" class="btn btn-danger" style="display: none;">Stop</button>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2>Current Status</h2>
+                <div class="stats-grid">
+                    <div class="stat">
+                        <div class="stat-value" id="completedTasks">0</div>
+                        <div class="stat-label">Completed</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="pendingTasks">0</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="findings">0</div>
+                        <div class="stat-label">Findings</div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label>Elapsed Time</label>
+                    <div id="elapsedTime" style="font-size: 1.25rem; font-weight: 500;">--</div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <label>Run ID</label>
+                    <div id="runId" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary);">--</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Model Status</h2>
+                <div id="modelsList" class="models-list">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Schedules</h2>
+                <div id="schedulesList">
+                    <div class="empty-state">No schedules configured</div>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" onclick="showScheduleModal()">Add Schedule</button>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <h2>Recent Reports</h2>
+                <div id="reportsList" class="reports-list">
+                    <div class="empty-state">Loading...</div>
+                </div>
+                <div class="btn-group">
+                    <a href="/report/latest" target="_blank" class="btn btn-secondary">View Latest Report</a>
+                    <a href="/report/diff" target="_blank" class="btn btn-secondary">View Diff Report</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="scheduleModal" class="modal-overlay">
+        <div class="modal">
+            <h3>Add Schedule</h3>
+            <form id="scheduleForm">
+                <div class="form-group">
+                    <label>Projects (comma-separated)</label>
+                    <input type="text" id="schedProjects" value="opsorchestra, ghost-sentry">
+                </div>
+                <div class="form-group">
+                    <label>Time (24h format)</label>
+                    <input type="time" id="schedTime" value="22:00">
+                </div>
+                <div class="form-group">
+                    <label>Days</label>
+                    <select id="schedDays">
+                        <option value="daily">Daily</option>
+                        <option value="weekdays">Weekdays</option>
+                        <option value="weekends">Weekends</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Duration (hours)</label>
+                    <input type="number" id="schedDuration" value="8" min="1" max="24">
+                </div>
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary">Create Schedule</button>
+                    <button type="button" class="btn btn-secondary" onclick="hideScheduleModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        let refreshInterval;
+        let countdownInterval;
+        let countdown = 5;
+        
+        async function fetchStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/status`);
+                const data = await res.json();
+                
+                document.getElementById('statusBadge').textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                document.getElementById('statusBadge').className = `status-badge status-${data.status}`;
+                
+                document.getElementById('completedTasks').textContent = data.completed_tasks || 0;
+                document.getElementById('pendingTasks').textContent = data.pending_tasks || 0;
+                document.getElementById('findings').textContent = data.total_findings || 0;
+                document.getElementById('elapsedTime').textContent = data.elapsed_minutes ? `${data.elapsed_minutes} min` : '--';
+                document.getElementById('runId').textContent = data.run_id || '--';
+                
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                
+                if (data.status === 'running') {
+                    startBtn.disabled = true;
+                    stopBtn.style.display = 'inline-block';
+                } else {
+                    startBtn.disabled = false;
+                    stopBtn.style.display = 'none';
+                }
+            } catch (e) {
+                document.getElementById('statusBadge').textContent = 'Offline';
+                document.getElementById('statusBadge').className = 'status-badge status-failed';
+            }
+        }
+        
+        async function fetchModels() {
+            try {
+                const res = await fetch(`${API_BASE}/models`);
+                const data = await res.json();
+                
+                const container = document.getElementById('modelsList');
+                container.innerHTML = Object.entries(data).map(([name, info]) => `
+                    <div class="model-item">
+                        <span>${name}</span>
+                        <span class="${info.available ? 'model-available' : 'model-limited'}">
+                            ${info.available ? 'Available' : `Limited (${info.retry_after_seconds}s)`}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('modelsList').innerHTML = '<div class="empty-state">Failed to load</div>';
+            }
+        }
+        
+        async function fetchReports() {
+            try {
+                const res = await fetch(`${API_BASE}/reports`);
+                const data = await res.json();
+                
+                const container = document.getElementById('reportsList');
+                if (data.reports.length === 0) {
+                    container.innerHTML = '<div class="empty-state">No reports yet</div>';
+                    return;
+                }
+                
+                container.innerHTML = data.reports.map(r => `
+                    <div class="report-item">
+                        <div>
+                            <div class="report-name">${r.name}</div>
+                            <div class="report-date">${new Date(r.created).toLocaleString()}</div>
+                        </div>
+                        <div class="report-actions">
+                            <a href="${r.path}" target="_blank">View</a>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) {
+                document.getElementById('reportsList').innerHTML = '<div class="empty-state">Failed to load</div>';
+            }
+        }
+        
+        async function fetchSchedules() {
+            try {
+                const res = await fetch(`${API_BASE}/schedules`);
+                const data = await res.json();
+                
+                const container = document.getElementById('schedulesList');
+                if (!data.schedules || data.schedules.length === 0) {
+                    container.innerHTML = '<div class="empty-state">No schedules configured</div>';
+                    return;
+                }
+                
+                container.innerHTML = data.schedules.map(s => `
+                    <div class="schedule-item">
+                        <div class="schedule-info">
+                            <div class="schedule-time">${s.time} (${s.days})</div>
+                            <div class="schedule-projects">${s.projects.join(', ')}</div>
+                        </div>
+                        <button class="btn btn-secondary" onclick="deleteSchedule('${s.id}')">Remove</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                // Schedules endpoint might not exist yet
+            }
+        }
+        
+        document.getElementById('startForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const projects = document.getElementById('projects').value.split(',').map(p => p.trim()).filter(Boolean);
+            const duration = parseFloat(document.getElementById('duration').value);
+            const priorityMode = document.getElementById('priorityMode').value;
+            const createIssues = document.getElementById('createIssues').checked;
+            const slackWebhook = document.getElementById('slackWebhook').value || null;
+            
+            try {
+                const res = await fetch(`${API_BASE}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projects,
+                        duration_hours: duration,
+                        priority_mode: priorityMode,
+                        create_github_issues: createIssues,
+                        slack_webhook: slackWebhook
+                    })
+                });
+                
+                if (res.ok) {
+                    fetchStatus();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to start');
+                }
+            } catch (e) {
+                alert('Failed to connect to server');
+            }
+        });
+        
+        document.getElementById('stopBtn').addEventListener('click', async () => {
+            try {
+                await fetch(`${API_BASE}/stop`, { method: 'POST' });
+                fetchStatus();
+            } catch (e) {
+                alert('Failed to stop');
+            }
+        });
+        
+        function showScheduleModal() {
+            document.getElementById('scheduleModal').classList.add('active');
+        }
+        
+        function hideScheduleModal() {
+            document.getElementById('scheduleModal').classList.remove('active');
+        }
+        
+        document.getElementById('scheduleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const projects = document.getElementById('schedProjects').value.split(',').map(p => p.trim()).filter(Boolean);
+            const time = document.getElementById('schedTime').value;
+            const days = document.getElementById('schedDays').value;
+            const duration = parseFloat(document.getElementById('schedDuration').value);
+            
+            try {
+                const res = await fetch(`${API_BASE}/schedules`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projects, time, days, duration_hours: duration })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    hideScheduleModal();
+                    fetchSchedules();
+                    alert(`Schedule created!\n\nCron line:\n${data.cron}\n\nAdd this to your crontab or use launchd.`);
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || 'Failed to create schedule');
+                }
+            } catch (e) {
+                alert('Failed to connect to server');
+            }
+        });
+        
+        async function deleteSchedule(id) {
+            if (!confirm('Delete this schedule?')) return;
+            
+            try {
+                await fetch(`${API_BASE}/schedules/${id}`, { method: 'DELETE' });
+                fetchSchedules();
+            } catch (e) {
+                alert('Failed to delete');
+            }
+        }
+        
+        function updateCountdown() {
+            countdown--;
+            document.getElementById('countdown').textContent = countdown;
+            if (countdown <= 0) {
+                countdown = 5;
+                fetchStatus();
+                fetchModels();
+            }
+        }
+        
+        // Initial load
+        fetchStatus();
+        fetchModels();
+        fetchReports();
+        fetchSchedules();
+        
+        // Auto-refresh
+        countdownInterval = setInterval(updateCountdown, 1000);
+    </script>
+</body>
+</html>

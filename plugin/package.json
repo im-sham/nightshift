@@ -1,0 +1,34 @@
+{
+  "name": "opencode-nightshift",
+  "version": "0.1.0",
+  "description": "Overnight autonomous research agent for OpenCode - analyzes codebases while you sleep",
+  "type": "module",
+  "main": "index.ts",
+  "files": [
+    "index.ts"
+  ],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "research",
+    "codebase",
+    "analysis",
+    "autonomous",
+    "agent",
+    "overnight"
+  ],
+  "author": "srehman",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/im-sham/nightshift.git"
+  },
+  "bugs": {
+    "url": "https://github.com/im-sham/nightshift/issues"
+  },
+  "homepage": "https://github.com/im-sham/nightshift#readme",
+  "dependencies": {
+    "@opencode-ai/plugin": "latest",
+    "zod": "^3.22.0"
+  }
+}

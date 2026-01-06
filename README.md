@@ -1,0 +1,131 @@
+# 🌙 Nightshift
+
+Nightshift is an overnight autonomous research agent designed for **OpenCode**. It performs deep analysis of codebases while you sleep, providing comprehensive audits, enhancement recommendations, and research reports by the time you start your next day.
+
+[![npm version](https://img.shields.io/npm/v/nightshift-plugin.svg)](https://www.npmjs.com/package/nightshift-plugin)
+[![Python version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
+## Features
+
+- **Autonomous Research**: Deep dives into codebases without manual intervention.
+- **Multi-Model Failover**: Intelligent failover chain across Claude Opus, GPT-5, and Gemini models to bypass rate limits and optimize performance.
+- **Comprehensive Reports**: Generates detailed HTML research reports and differential reports comparing changes between runs.
+- **OpenCode Integration**: A dedicated plugin that lets you control Nightshift directly from your editor.
+- **Smart Scheduling**: Built-in support for daily research tasks using cron or macOS launchd.
+- **GitHub Integration**: Automatically creates issues for critical findings.
+- **Notifications**: Real-time alerts via Slack or custom webhooks.
+- **Web Dashboard**: Interactive dashboard for monitoring runs and viewing findings.
+
+## Installation
+
+### 1. Python Package
+
+Install the core engine and CLI:
+
+```bash
+cd /Users/shamimrehman/Projects/nightshift
+pip install -e .
+```
+
+### 2. OpenCode Plugin
+
+Install the plugin dependencies:
+
+```bash
+cd /Users/shamimrehman/Projects/nightshift/plugin
+bun install
+```
+
+To load the plugin in OpenCode, point your plugin configuration to the `plugin/index.ts` file or the compiled output.
+
+## Quick Start
+
+1. **Start the API Server**:
+   ```bash
+   nightshift serve
+   ```
+
+2. **Run a Research Task**:
+   ```bash
+   nightshift start opsorchestra ghost-sentry --duration 8.0
+   ```
+
+3. **View the Report**:
+   ```bash
+   nightshift report
+   ```
+
+## CLI Usage
+
+The `nightshift` command provides several subcommands:
+
+- `start [PROJECTS]...`: Start a research run on specified projects or paths.
+- `serve`: Start the HTTP API server (default port: 7890).
+- `status`: Show current run status and model availability.
+- `report`: Open the latest research report in your browser.
+- `diff`: Generate and open a differential report comparing to the previous run.
+- `list`: List all historical reports.
+- `clean`: Delete old data and reports.
+
+## Web Dashboard
+
+Once the server is running (`nightshift serve`), you can access the interactive dashboard at:
+http://127.0.0.1:7890/
+
+The dashboard allows you to:
+- Monitor real-time task progress.
+- View live findings and model performance.
+- Manage scheduled runs.
+
+## API Reference
+
+Nightshift exposes a REST API on port 7890.
+
+### Start a Run
+```bash
+curl -X POST http://127.0.0.1:7890/start \
+     -H "Content-Type: application/json" \
+     -d '{
+       "projects": ["opsorchestra"],
+       "duration_hours": 8.0,
+       "create_github_issues": true,
+       "priority_mode": "balanced"
+     }'
+```
+
+### Check Status
+```bash
+curl http://127.0.0.1:7890/status
+```
+
+### Other Endpoints
+- `GET /reports`: List all reports.
+- `GET /report/latest`: View the latest HTML report.
+- `GET /report/diff`: View the differential report.
+- `GET /models`: Check model availability and rate limits.
+- `POST /stop`: Stop the current run.
+
+## Configuration
+
+Nightshift stores its data in `~/.nightshift`.
+
+### Environment Variables
+- `NIGHTSHIFT_DATA_DIR`: Override the default data directory.
+- `SLACK_WEBHOOK_URL`: Default webhook for notifications.
+
+### Model Failover Chain
+Nightshift automatically cycles through the following models:
+1. Claude 4.5 Thinking (High)
+2. GPT-5.2
+3. Gemini 3 Pro (High)
+4. Gemini 3 Flash
+
+## Architecture
+
+Nightshift consists of three main components:
+1. **Core Engine (Python)**: Handles the task queue, model management, and research logic.
+2. **API Server (FastAPI)**: Provides a bridge between the core engine and external tools.
+3. **OpenCode Plugin (TypeScript)**: Exposes research tools directly within the developer environment.
+
+---
+Built for autonomous engineering.
