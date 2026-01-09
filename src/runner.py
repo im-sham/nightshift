@@ -268,8 +268,9 @@ class NightshiftRunner:
         
         loop = asyncio.new_event_loop()
         try:
+            model_id = f"{model.provider}/{model.model_id}" if model else None
             result = loop.run_until_complete(
-                client.call_agent(agent_type, prompt)
+                client.call_agent(agent_type, prompt, model=model_id)
             )
             if result["success"]:
                 return result["output"]
