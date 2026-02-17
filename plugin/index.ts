@@ -1,4 +1,4 @@
-import type { Plugin, PluginInput, Hooks } from "@opencode-ai/plugin";
+import type { Plugin, Hooks } from "@opencode-ai/plugin";
 import { z } from "zod";
 
 const NIGHTSHIFT_API = "http://127.0.0.1:7890";
@@ -17,65 +17,79 @@ async function apiCall(endpoint: string, options: RequestInit = {}): Promise<any
   return response.json();
 }
 
-const nightshiftPlugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
-  const { $ } = input;
-
+const nightshiftPlugin: Plugin = async (): Promise<Hooks> => {
   return {
     tool: {
       nightshift_start: {
         description: "Start a nightshift research run on selected projects. Runs analysis overnight and generates HTML report.",
-        parameters: z.object({
+        args: ({
           projects: z.array(z.string()).describe("Project names: opsorchestra, ghost-sentry, or paths"),
           duration: z.number().optional().default(8).describe("Max duration in hours"),
           create_github_issues: z.boolean().optional().default(false).describe("Auto-create GitHub issues for critical findings"),
           priority_mode: z.enum(["balanced", "security_first", "research_heavy", "quick_scan"]).optional().default("balanced"),
           slack_webhook: z.string().optional().describe("Slack webhook URL for notifications"),
           webhook_url: z.string().optional().describe("Generic webhook URL for notifications"),
-        }),
-        async execute({ projects, duration, create_github_issues, priority_mode, slack_webhook, webhook_url }) {
+        } as any),
+        async execute(args) {
+          const {
+            projects,
+            duration,
+            create_github_issues,
+            priority_mode,
+            slack_webhook,
+            webhook_url,
+          } = args as {
+            projects: string[];
+            duration?: number;
+            create_github_issues?: boolean;
+            priority_mode?: "balanced" | "security_first" | "research_heavy" | "quick_scan";
+            slack_webhook?: string;
+            webhook_url?: string;
+          };
+
+          const effectiveDuration = duration ?? 8;
+          const effectiveCreateGithubIssues = create_github_issues ?? false;
+          const effectivePriorityMode = priority_mode ?? "balanced";
+
           try {
-            const result = await apiCall("/start", {
+            await apiCall("/start", {
               method: "POST",
               body: JSON.stringify({
                 projects,
-                duration_hours: duration,
-                create_github_issues,
-                priority_mode,
+                duration_hours: effectiveDuration,
+                create_github_issues: effectiveCreateGithubIssues,
+                priority_mode: effectivePriorityMode,
                 slack_webhook,
                 webhook_url,
               }),
             });
-            return {
-              title: "Nightshift Started",
-              output: `Started nightshift for: ${projects.join(", ")}\nDuration: ${duration}h\nGitHub Issues: ${create_github_issues}\nMode: ${priority_mode}\nSlack: ${slack_webhook ? "enabled" : "disabled"}`,
-              metadata: result,
-            };
+
+            return `Nightshift started for: ${projects.join(", ")}
+Duration: ${effectiveDuration}h
+GitHub Issues: ${effectiveCreateGithubIssues}
+Mode: ${effectivePriorityMode}
+Slack: ${slack_webhook ? "enabled" : "disabled"}`;
           } catch (e: any) {
-            return {
-              title: "Nightshift Start Failed",
-              output: `Failed to start: ${e.message}\n\nMake sure the nightshift server is running:\n  cd ~/Projects/nightshift && python -m src.cli serve`,
-              metadata: { error: true },
-            };
+            return `Nightshift start failed: ${e.message}
+
+Make sure the nightshift server is running:
+  nightshift serve`;
           }
         },
       },
 
       nightshift_stop: {
         description: "Stop a running nightshift research run",
-        parameters: z.object({}),
+        args: {},
         async execute() {
           const result = await apiCall("/stop", { method: "POST" });
-          return {
-            title: "Nightshift Stopped",
-            output: result.message || "Stop requested",
-            metadata: result,
-          };
+          return result.message || "Stop requested";
         },
       },
 
       nightshift_status: {
         description: "Get current nightshift run status and statistics",
-        parameters: z.object({}),
+        args: {},
         async execute() {
           try {
             const result = await apiCall("/status");
@@ -86,64 +100,52 @@ const nightshiftPlugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
               `Tasks: ${result.completed_tasks} completed, ${result.pending_tasks} pending`,
               `Findings: ${result.total_findings}`,
             ];
-            return {
-              title: "Nightshift Status",
-              output: lines.join("\n"),
-              metadata: result,
-            };
+            return lines.join("\n");
           } catch (e: any) {
-            return {
-              title: "Nightshift Status",
-              output: `Server not running. Start with:\n  cd ~/Projects/nightshift && python -m src.cli serve`,
-              metadata: { error: true },
-            };
+            return `Server not running. Start with:
+  nightshift serve`;
           }
         },
       },
 
       nightshift_report: {
         description: "Get the latest nightshift report or diff report",
-        parameters: z.object({
+        args: ({
           type: z.enum(["latest", "diff"]).optional().default("latest").describe("Report type"),
-        }),
-        async execute({ type }) {
-          const endpoint = type === "diff" ? "/report/diff" : "/report/latest";
-          const result = await apiCall(endpoint);
-          return {
-            title: `Nightshift ${type === "diff" ? "Diff" : "Latest"} Report`,
-            output: `Report available at: ${NIGHTSHIFT_API}${endpoint}\n\nOpen in browser: open "${NIGHTSHIFT_API}${endpoint}"`,
-            metadata: result,
-          };
+        } as any),
+        async execute(args) {
+          const { type } = args as { type?: "latest" | "diff" };
+          const reportType = type ?? "latest";
+
+          const endpoint = reportType === "diff" ? "/report/diff" : "/report/latest";
+          await apiCall(endpoint);
+          return `Nightshift ${reportType === "diff" ? "diff" : "latest"} report:
+${NIGHTSHIFT_API}${endpoint}
+
+Open in browser:
+open "${NIGHTSHIFT_API}${endpoint}"`;
         },
       },
 
       nightshift_reports: {
         description: "List all available nightshift reports",
-        parameters: z.object({}),
+        args: {},
         async execute() {
           const result = await apiCall("/reports");
           const lines = result.reports.map((r: any) => `${r.name} - ${r.created}`);
-          return {
-            title: "Nightshift Reports",
-            output: lines.join("\n") || "No reports found",
-            metadata: result,
-          };
+          return lines.join("\n") || "No reports found";
         },
       },
 
       nightshift_models: {
         description: "Get model availability and performance stats",
-        parameters: z.object({}),
+        args: {},
         async execute() {
           const result = await apiCall("/models");
           const lines = Object.entries(result).map(([model, info]: [string, any]) => 
             `${model}: ${info.available ? "Available" : `Rate limited (${info.retry_after_seconds}s)`}`
           );
-          return {
-            title: "Nightshift Models",
-            output: lines.join("\n"),
-            metadata: result,
-          };
+          return lines.join("\n");
         },
       },
     },

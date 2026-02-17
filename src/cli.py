@@ -19,6 +19,11 @@ def start(
         "--duration", "-d",
         help="Maximum duration in hours"
     ),
+    priority_mode: str = typer.Option(
+        "balanced",
+        "--priority-mode", "-m",
+        help="Task prioritization mode: balanced, security_first, research_heavy, quick_scan",
+    ),
 ):
     """Start a nightshift research run."""
     from .runner import run_nightshift
@@ -26,10 +31,11 @@ def start(
     console.print(f"[bold green]Starting Nightshift[/bold green]")
     console.print(f"Projects: {', '.join(projects)}")
     console.print(f"Max duration: {duration} hours")
+    console.print(f"Priority mode: {priority_mode}")
     console.print()
     
     try:
-        report = run_nightshift(projects, duration)
+        report = run_nightshift(projects, duration, priority_mode=priority_mode)
         console.print(f"\n[bold green]Nightshift completed![/bold green]")
         console.print(f"Tasks completed: {report.completed_tasks}")
         console.print(f"Findings: {len(report.all_findings)}")

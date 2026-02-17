@@ -23,7 +23,7 @@ Nightshift is an overnight autonomous research agent designed for **OpenCode**. 
 Install the core engine and CLI:
 
 ```bash
-cd /Users/shamimrehman/Projects/nightshift
+cd /path/to/nightshift
 pip install -e .
 ```
 
@@ -32,7 +32,7 @@ pip install -e .
 Install the plugin dependencies:
 
 ```bash
-cd /Users/shamimrehman/Projects/nightshift/plugin
+cd /path/to/nightshift/plugin
 bun install
 ```
 
@@ -111,6 +111,8 @@ Nightshift stores its data in `~/.nightshift`.
 
 ### Environment Variables
 - `NIGHTSHIFT_DATA_DIR`: Override the default data directory.
+- `NIGHTSHIFT_PROJECT_OPSORCHESTRA`: Override default path for the `opsorchestra` alias.
+- `NIGHTSHIFT_PROJECT_GHOST_SENTRY`: Override default path for the `ghost-sentry` alias.
 - `SLACK_WEBHOOK_URL`: Default webhook for notifications.
 
 ### Model Failover Chain

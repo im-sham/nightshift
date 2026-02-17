@@ -47,6 +47,7 @@ class DiffReportGenerator:
 
     def record_run(self, run_id: str, findings: list[Finding]):
         history = self._load_history()
+        history["runs"] = [r for r in history["runs"] if r.get("run_id") != run_id]
         
         run_record = {
             "run_id": run_id,
@@ -82,7 +83,8 @@ class DiffReportGenerator:
     def compute_diff(
         self, 
         current_findings: list[Finding],
-        compare_to_run_id: Optional[str] = None
+        compare_to_run_id: Optional[str] = None,
+        current_run_id: Optional[str] = None,
     ) -> FindingDiff:
         history = self._load_history()
         
@@ -98,6 +100,17 @@ class DiffReportGenerator:
                 (r for r in history["runs"] if r["run_id"] == compare_to_run_id),
                 None
             )
+        elif current_run_id:
+            current_idx = next(
+                (idx for idx, run in enumerate(history["runs"]) if run["run_id"] == current_run_id),
+                None,
+            )
+            if current_idx is not None and current_idx > 0:
+                previous_run = history["runs"][current_idx - 1]
+            elif current_idx is None:
+                previous_run = history["runs"][-1] if history["runs"] else None
+            else:
+                previous_run = None
         else:
             previous_run = history["runs"][-1] if history["runs"] else None
         
@@ -142,10 +155,15 @@ class DiffReportGenerator:
 
     def generate_diff_report(self, compare_to_run_id: Optional[str] = None) -> str:
         queue = TaskQueue(self.config)
-        current_findings = queue.get_all_findings()
+        current_run_id = queue.get_latest_run_id()
+        current_findings = queue.get_all_findings(run_id=current_run_id)
         queue.close()
         
-        diff = self.compute_diff(current_findings, compare_to_run_id)
+        diff = self.compute_diff(
+            current_findings,
+            compare_to_run_id=compare_to_run_id,
+            current_run_id=current_run_id,
+        )
         
         html = f"""
 <!DOCTYPE html>
