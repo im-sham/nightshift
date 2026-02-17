@@ -14,16 +14,22 @@ from .config import NightshiftConfig, ProjectConfig
 class TaskQueue:
     config: NightshiftConfig
     _conn: Optional[sqlite3.Connection] = field(default=None, repr=False)
+    current_run_id: Optional[str] = field(default=None, repr=False)
 
     def __post_init__(self):
-        self._conn = sqlite3.connect(self.config.db_path)
+        self._conn = sqlite3.connect(self.config.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
+
+    def _column_exists(self, table: str, column: str) -> bool:
+        rows = self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+        return any(row["name"] == column for row in rows)
 
     def _init_schema(self):
         self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
+                run_id TEXT,
                 task_type TEXT NOT NULL,
                 project_name TEXT NOT NULL,
                 project_path TEXT NOT NULL,
@@ -65,7 +71,12 @@ class TaskQueue:
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_name);
             CREATE INDEX IF NOT EXISTS idx_findings_task ON findings(task_id);
+            CREATE INDEX IF NOT EXISTS idx_tasks_run_id ON tasks(run_id);
         """)
+
+        if not self._column_exists("tasks", "run_id"):
+            self._conn.execute("ALTER TABLE tasks ADD COLUMN run_id TEXT")
+
         self._conn.commit()
 
     def create_run(self) -> str:
@@ -75,9 +86,21 @@ class TaskQueue:
             (run_id, datetime.now().isoformat())
         )
         self._conn.commit()
+        self.current_run_id = run_id
         return run_id
 
+    def set_run_context(self, run_id: Optional[str]):
+        self.current_run_id = run_id
+
+    def _resolve_run_id(self, run_id: Optional[str]) -> Optional[str]:
+        if run_id is not None:
+            return run_id
+        return self.current_run_id
+
     def generate_tasks_for_project(self, project: ProjectConfig) -> list[ResearchTask]:
+        if not self.current_run_id:
+            raise RuntimeError("No active run set. Call create_run() before generating tasks.")
+
         tasks = []
         
         audit_tasks = [
@@ -114,26 +137,36 @@ class TaskQueue:
                 task_type=task_type,
                 project_name=project.name,
                 project_path=project.path,
+                run_id=self.current_run_id,
                 priority=priority,
             )
             tasks.append(task)
             self._save_task(task)
-        
+
         return tasks
 
     def _save_task(self, task: ResearchTask):
         self._conn.execute("""
             INSERT OR REPLACE INTO tasks 
-            (id, task_type, project_name, project_path, status, priority, 
+            (id, run_id, task_type, project_name, project_path, status, priority,
              started_at, completed_at, model_used, tokens_used, raw_output, error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            task.id, task.task_type.value, task.project_name, str(task.project_path),
+            task.id, task.run_id, task.task_type.value, task.project_name, str(task.project_path),
             task.status.value, task.priority, 
             task.started_at.isoformat() if task.started_at else None,
             task.completed_at.isoformat() if task.completed_at else None,
             task.model_used, task.tokens_used, task.raw_output, task.error
         ))
+        self._conn.commit()
+
+    def update_task_priorities(self, ordered_tasks: list[ResearchTask]):
+        for priority, task in enumerate(ordered_tasks, start=1):
+            self._conn.execute(
+                "UPDATE tasks SET priority = ? WHERE id = ?",
+                (priority, task.id),
+            )
+            task.priority = priority
         self._conn.commit()
 
     def save_finding(self, task_id: str, finding: Finding):
@@ -148,28 +181,51 @@ class TaskQueue:
         ))
         self._conn.commit()
 
-    def get_next_pending_task(self) -> Optional[ResearchTask]:
-        row = self._conn.execute("""
-            SELECT * FROM tasks 
-            WHERE status = 'pending' 
-            ORDER BY priority ASC 
-            LIMIT 1
-        """).fetchone()
-        
+    def get_next_pending_task(self, run_id: Optional[str] = None) -> Optional[ResearchTask]:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            row = self._conn.execute("""
+                SELECT * FROM tasks
+                WHERE status = 'pending' AND run_id = ?
+                ORDER BY priority ASC
+                LIMIT 1
+            """, (active_run_id,)).fetchone()
+        else:
+            row = self._conn.execute("""
+                SELECT * FROM tasks
+                WHERE status = 'pending'
+                ORDER BY priority ASC
+                LIMIT 1
+            """).fetchone()
+
         if row:
             return self._row_to_task(row)
         return None
 
-    def get_pending_count(self) -> int:
-        result = self._conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE status = 'pending'"
-        ).fetchone()
+    def get_pending_count(self, run_id: Optional[str] = None) -> int:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            result = self._conn.execute(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'pending' AND run_id = ?",
+                (active_run_id,),
+            ).fetchone()
+        else:
+            result = self._conn.execute(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'pending'"
+            ).fetchone()
         return result[0] if result else 0
 
-    def get_completed_count(self) -> int:
-        result = self._conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE status = 'completed'"
-        ).fetchone()
+    def get_completed_count(self, run_id: Optional[str] = None) -> int:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            result = self._conn.execute(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'completed' AND run_id = ?",
+                (active_run_id,),
+            ).fetchone()
+        else:
+            result = self._conn.execute(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'completed'"
+            ).fetchone()
         return result[0] if result else 0
 
     def mark_in_progress(self, task_id: str, model: str):
@@ -193,16 +249,32 @@ class TaskQueue:
         """, (datetime.now().isoformat(), error, task_id))
         self._conn.commit()
 
-    def get_all_findings(self) -> list[Finding]:
-        rows = self._conn.execute("SELECT * FROM findings").fetchall()
+    def get_all_findings(self, run_id: Optional[str] = None) -> list[Finding]:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            rows = self._conn.execute("""
+                SELECT f.* FROM findings f
+                JOIN tasks t ON f.task_id = t.id
+                WHERE t.run_id = ?
+            """, (active_run_id,)).fetchall()
+        else:
+            rows = self._conn.execute("SELECT * FROM findings").fetchall()
         return [self._row_to_finding(row) for row in rows]
 
-    def get_findings_for_project(self, project_name: str) -> list[Finding]:
-        rows = self._conn.execute("""
-            SELECT f.* FROM findings f
-            JOIN tasks t ON f.task_id = t.id
-            WHERE t.project_name = ?
-        """, (project_name,)).fetchall()
+    def get_findings_for_project(self, project_name: str, run_id: Optional[str] = None) -> list[Finding]:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            rows = self._conn.execute("""
+                SELECT f.* FROM findings f
+                JOIN tasks t ON f.task_id = t.id
+                WHERE t.project_name = ? AND t.run_id = ?
+            """, (project_name, active_run_id)).fetchall()
+        else:
+            rows = self._conn.execute("""
+                SELECT f.* FROM findings f
+                JOIN tasks t ON f.task_id = t.id
+                WHERE t.project_name = ?
+            """, (project_name,)).fetchall()
         return [self._row_to_finding(row) for row in rows]
 
     def _row_to_task(self, row) -> ResearchTask:
@@ -211,6 +283,7 @@ class TaskQueue:
             task_type=TaskType(row["task_type"]),
             project_name=row["project_name"],
             project_path=Path(row["project_path"]),
+            run_id=row["run_id"] if "run_id" in row.keys() else None,
             status=TaskStatus(row["status"]),
             priority=row["priority"],
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
@@ -233,20 +306,95 @@ class TaskQueue:
             metadata=json.loads(row["metadata_json"]) if row["metadata_json"] else {},
         )
 
-    def get_statistics(self) -> dict:
+    def get_statistics(self, run_id: Optional[str] = None) -> dict:
+        active_run_id = self._resolve_run_id(run_id)
         stats = {}
         for status in TaskStatus:
-            result = self._conn.execute(
-                "SELECT COUNT(*) FROM tasks WHERE status = ?", (status.value,)
-            ).fetchone()
+            if active_run_id:
+                result = self._conn.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE status = ? AND run_id = ?",
+                    (status.value, active_run_id),
+                ).fetchone()
+            else:
+                result = self._conn.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE status = ?", (status.value,)
+                ).fetchone()
             stats[status.value] = result[0] if result else 0
-        
-        tokens_result = self._conn.execute(
-            "SELECT SUM(tokens_used) FROM tasks WHERE status = 'completed'"
-        ).fetchone()
+
+        if active_run_id:
+            tokens_result = self._conn.execute(
+                "SELECT SUM(tokens_used) FROM tasks WHERE status = 'completed' AND run_id = ?",
+                (active_run_id,),
+            ).fetchone()
+        else:
+            tokens_result = self._conn.execute(
+                "SELECT SUM(tokens_used) FROM tasks WHERE status = 'completed'"
+            ).fetchone()
         stats["total_tokens"] = tokens_result[0] or 0
-        
+
         return stats
+
+    def get_latest_run_id(self) -> Optional[str]:
+        row = self._conn.execute(
+            "SELECT id FROM runs ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        return row["id"] if row else None
+
+    def finalize_run(self, run_id: Optional[str] = None):
+        active_run_id = self._resolve_run_id(run_id)
+        if not active_run_id:
+            return
+
+        stats = self.get_statistics(run_id=active_run_id)
+        models = self.get_models_used(run_id=active_run_id)
+
+        total_tasks = sum(stats.get(status.value, 0) for status in TaskStatus)
+        self._conn.execute(
+            """
+            UPDATE runs
+            SET completed_at = ?,
+                total_tasks = ?,
+                completed_tasks = ?,
+                failed_tasks = ?,
+                total_tokens = ?,
+                models_used_json = ?
+            WHERE id = ?
+            """,
+            (
+                datetime.now().isoformat(),
+                total_tasks,
+                stats.get(TaskStatus.COMPLETED.value, 0),
+                stats.get(TaskStatus.FAILED.value, 0),
+                stats.get("total_tokens", 0),
+                json.dumps(models),
+                active_run_id,
+            ),
+        )
+        self._conn.commit()
+
+    def get_models_used(self, run_id: Optional[str] = None) -> list[str]:
+        active_run_id = self._resolve_run_id(run_id)
+        if not active_run_id:
+            rows = self._conn.execute(
+                """
+                SELECT DISTINCT model_used
+                FROM tasks
+                WHERE model_used IS NOT NULL
+                ORDER BY model_used
+                """
+            ).fetchall()
+            return [row["model_used"] for row in rows]
+
+        rows = self._conn.execute(
+            """
+            SELECT DISTINCT model_used
+            FROM tasks
+            WHERE run_id = ? AND model_used IS NOT NULL
+            ORDER BY model_used
+            """,
+            (active_run_id,),
+        ).fetchall()
+        return [row["model_used"] for row in rows]
 
     def close(self):
         if self._conn:

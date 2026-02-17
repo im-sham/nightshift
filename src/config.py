@@ -53,6 +53,8 @@ class NightshiftConfig:
     max_duration_hours: float = 8.0
     checkpoint_interval_minutes: int = 5
     quota_check_interval_minutes: int = 30
+    priority_mode: str = "balanced"
+    open_report_in_browser: bool = True
     
     # Paths
     data_dir: Path = field(default_factory=lambda: Path.home() / ".nightshift")
@@ -84,16 +86,31 @@ class NightshiftConfig:
         return None
 
 
-# Default project paths (can be overridden)
+def _project_path_from_env_or_default(env_var: str, default_path: Path) -> Path:
+    value = os.getenv(env_var)
+    if value:
+        return Path(value).expanduser()
+    return default_path
+
+
+# Default project paths (can be overridden via env vars)
 DEFAULT_PROJECTS = {
-    "opsorchestra": Path("/Users/shamimrehman/Projects/opsorchestra"),
-    "ghost-sentry": Path("/Users/shamimrehman/Projects/anor/ghost-sentry"),
+    "opsorchestra": _project_path_from_env_or_default(
+        "NIGHTSHIFT_PROJECT_OPSORCHESTRA",
+        Path.home() / "Projects" / "opsorchestra",
+    ),
+    "ghost-sentry": _project_path_from_env_or_default(
+        "NIGHTSHIFT_PROJECT_GHOST_SENTRY",
+        Path.home() / "Projects" / "anor" / "ghost-sentry",
+    ),
 }
 
 
 def get_config(
     project_names: list[str],
     duration_hours: float = 8.0,
+    priority_mode: str = "balanced",
+    open_report_in_browser: bool = True,
 ) -> NightshiftConfig:
     """Create a NightshiftConfig from project names."""
     
@@ -112,4 +129,6 @@ def get_config(
     return NightshiftConfig(
         projects=projects,
         max_duration_hours=duration_hours,
+        priority_mode=priority_mode,
+        open_report_in_browser=open_report_in_browser,
     )

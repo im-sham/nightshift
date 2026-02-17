@@ -67,6 +67,7 @@ class ResearchTask:
     task_type: TaskType
     project_name: str
     project_path: Path
+    run_id: Optional[str] = None
     status: TaskStatus = TaskStatus.PENDING
     priority: int = 0
     

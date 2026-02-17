@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
-import asyncio
 import time
 import uuid
 import json
-import subprocess
 from pathlib import Path
 
-from .config import NightshiftConfig, ProjectConfig
+from .config import NightshiftConfig
 from .models import (
     ResearchTask, TaskStatus, TaskType, Finding, FindingSeverity,
     NightshiftReport, ProjectReport
@@ -16,6 +14,8 @@ from .models import (
 from .task_queue import TaskQueue
 from .model_manager import ModelFailoverManager, create_default_manager
 from .report_generator import ReportGenerator
+from .diff_report import DiffReportGenerator
+from .prioritization import SmartPrioritizer
 
 
 TASK_PROMPTS = {
@@ -180,16 +180,22 @@ class NightshiftRunner:
 
     def setup_tasks(self):
         self.run_id = self.task_queue.create_run()
+        tasks = []
         for project in self.config.projects:
-            self.task_queue.generate_tasks_for_project(project)
+            tasks.extend(self.task_queue.generate_tasks_for_project(project))
+
+        prioritizer = SmartPrioritizer(mode=self.config.priority_mode)
+        prioritized_tasks = prioritizer.prioritize_tasks(tasks)
+        self.task_queue.update_task_priorities(prioritized_tasks)
 
     def run(self) -> NightshiftReport:
         self.start_time = time.time()
-        self.setup_tasks()
+        if not self.run_id:
+            self.setup_tasks()
         
         print(f"[Nightshift] Starting run {self.run_id}")
         print(f"[Nightshift] Projects: {[p.name for p in self.config.projects]}")
-        print(f"[Nightshift] Pending tasks: {self.task_queue.get_pending_count()}")
+        print(f"[Nightshift] Pending tasks: {self.task_queue.get_pending_count(run_id=self.run_id)}")
         
         max_seconds = self.config.max_duration_hours * 3600
         
@@ -199,7 +205,7 @@ class NightshiftRunner:
                 print(f"[Nightshift] Max duration reached ({self.config.max_duration_hours}h)")
                 break
             
-            task = self.task_queue.get_next_pending_task()
+            task = self.task_queue.get_next_pending_task(run_id=self.run_id)
             if not task:
                 print("[Nightshift] All tasks completed")
                 break
@@ -230,7 +236,8 @@ class NightshiftRunner:
             result = self._call_opencode_agent(
                 agent_type=self._get_agent_for_task(task.task_type),
                 prompt=formatted_prompt,
-                model=model
+                project_path=task.project_path,
+                model=model,
             )
             
             findings = self._parse_findings(result, task)
@@ -260,7 +267,13 @@ class NightshiftRunner:
             return "librarian"
         return "explore"
 
-    def _call_opencode_agent(self, agent_type: str, prompt: str, model) -> str:
+    def _call_opencode_agent(
+        self,
+        agent_type: str,
+        prompt: str,
+        model,
+        project_path: Optional[Path] = None,
+    ) -> str:
         from .agent_client import get_agent_client
         import asyncio
         
@@ -270,7 +283,12 @@ class NightshiftRunner:
         try:
             model_id = f"{model.provider}/{model.model_id}" if model else None
             result = loop.run_until_complete(
-                client.call_agent(agent_type, prompt, model=model_id)
+                client.call_agent(
+                    agent_type,
+                    prompt,
+                    project_path=project_path,
+                    model=model_id,
+                )
             )
             if result["success"]:
                 return result["output"]
@@ -294,7 +312,7 @@ class NightshiftRunner:
                         recommendation=item.get("recommendation"),
                     )
                     findings.append(finding)
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+        except (json.JSONDecodeError, KeyError, ValueError):
             findings.append(Finding(
                 id=f"finding_{uuid.uuid4().hex[:8]}",
                 severity=FindingSeverity.INFO,
@@ -304,11 +322,15 @@ class NightshiftRunner:
         return findings
 
     def _generate_report(self) -> NightshiftReport:
-        stats = self.task_queue.get_statistics()
-        
+        self.task_queue.finalize_run(run_id=self.run_id)
+        stats = self.task_queue.get_statistics(run_id=self.run_id)
+
         projects = []
         for project_config in self.config.projects:
-            findings = self.task_queue.get_findings_for_project(project_config.name)
+            findings = self.task_queue.get_findings_for_project(
+                project_config.name,
+                run_id=self.run_id,
+            )
             project_report = ProjectReport(
                 name=project_config.name,
                 path=project_config.path,
@@ -316,22 +338,27 @@ class NightshiftRunner:
                 tasks_completed=stats.get("completed", 0),
             )
             projects.append(project_report)
-        
+
         report = NightshiftReport(
             run_id=self.run_id,
             started_at=datetime.fromtimestamp(self.start_time),
             completed_at=datetime.now(),
             projects=projects,
-            total_tasks=stats.get("pending", 0) + stats.get("completed", 0) + stats.get("failed", 0),
+            total_tasks=sum(stats.get(status.value, 0) for status in TaskStatus),
             completed_tasks=stats.get("completed", 0),
             failed_tasks=stats.get("failed", 0),
             total_tokens=stats.get("total_tokens", 0),
-            models_used=list(self.model_manager.get_status().keys()),
+            models_used=self.task_queue.get_models_used(run_id=self.run_id),
         )
-        
-        report_path = self.report_generator.generate(report, open_browser=True)
+
+        report_path = self.report_generator.generate(
+            report,
+            open_browser=self.config.open_report_in_browser,
+        )
+        diff_report = DiffReportGenerator(self.config)
+        diff_report.record_run(self.run_id, report.all_findings)
         print(f"[Nightshift] Report generated: {report_path}")
-        
+
         return report
 
     def stop(self):
@@ -345,9 +372,10 @@ class RateLimitError(Exception):
 def run_nightshift(
     projects: list[str],
     duration_hours: float = 8.0,
+    priority_mode: str = "balanced",
 ) -> NightshiftReport:
     from .config import get_config
-    
-    config = get_config(projects, duration_hours)
+
+    config = get_config(projects, duration_hours, priority_mode=priority_mode)
     runner = NightshiftRunner(config)
     return runner.run()

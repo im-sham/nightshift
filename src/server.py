@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -79,8 +79,12 @@ def _run_in_thread(runner: NightshiftRunner, create_issues: bool, slack_webhook:
         notifier = get_notification_manager(slack_webhook, webhook_url)
     
     try:
+        if not runner.run_id:
+            runner.setup_tasks()
+
         _run_status["status"] = "running"
-        
+        _run_status["run_id"] = runner.run_id
+
         if notifier:
             loop = asyncio.new_event_loop()
             loop.run_until_complete(notifier.notify_run_started(
@@ -118,13 +122,18 @@ def _run_in_thread(runner: NightshiftRunner, create_issues: bool, slack_webhook:
 
 
 @app.post("/start")
-async def start_run(request: StartRequest, background_tasks: BackgroundTasks):
+async def start_run(request: StartRequest):
     global _current_runner, _runner_thread, _run_status
     
     if _run_status["status"] == "running":
         raise HTTPException(400, "A run is already in progress")
     
-    config = get_config(request.projects, request.duration_hours)
+    config = get_config(
+        request.projects,
+        request.duration_hours,
+        priority_mode=request.priority_mode,
+        open_report_in_browser=False,
+    )
     _current_runner = NightshiftRunner(config)
     _run_status = {
         "status": "starting",
@@ -185,7 +194,7 @@ async def get_status():
         elapsed_minutes=round(elapsed, 1),
         completed_tasks=stats.get("completed", 0),
         pending_tasks=stats.get("pending", 0),
-        total_findings=len(queue.get_all_findings()),
+        total_findings=len(queue.get_all_findings(run_id=_current_runner.run_id)),
         current_task=None,
         models_status=_current_runner.model_manager.get_status()
     )
