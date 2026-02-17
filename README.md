@@ -39,6 +39,43 @@ bun install
 
 To load the plugin in OpenCode, point your plugin configuration to the `plugin/index.ts` file or the compiled output.
 
+## First 10 Minutes
+
+Use this path if you want to validate your setup quickly before running a full overnight session.
+
+1. **Create starter config** (in your local Nightshift data directory):
+   ```bash
+   nightshift init --no-add-current-project
+   ```
+
+2. **Verify your environment**:
+   ```bash
+   nightshift doctor
+   ```
+
+3. **Preview tasks without executing agents**:
+   ```bash
+   nightshift start . --duration 0.5 --priority-mode quick_scan --dry-run
+   ```
+
+4. **Start dashboard**:
+   ```bash
+   nightshift serve
+   ```
+   Open: http://127.0.0.1:7890/
+
+5. **Run a small real pass**:
+   ```bash
+   nightshift start . --duration 1 --priority-mode quick_scan
+   nightshift report
+   ```
+
+Replace `.` with a project alias from `config.toml` if you prefer named targets.
+
+![Nightshift dashboard after a starter run](docs/assets/quickstart-dashboard.png)
+
+![Nightshift quickstart run flow](docs/assets/quickstart-run.gif)
+
 ## Quick Start
 
 1. **Initialize local config**:
@@ -71,6 +108,7 @@ To load the plugin in OpenCode, point your plugin configuration to the `plugin/i
 The `nightshift` command provides several subcommands:
 
 - `start [PROJECTS]...`: Start a research run on specified projects or paths.
+- `start [PROJECTS]... --dry-run`: Validate config and preview the generated task plan without running agents.
 - `init`: Create a starter `config.toml` in your Nightshift data directory.
 - `doctor`: Validate OpenCode/GitHub/config/dependency setup and show fix hints.
 - `serve`: Start the HTTP API server (default port: 7890).

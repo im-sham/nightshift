@@ -202,6 +202,17 @@ class TaskQueue:
             return self._row_to_task(row)
         return None
 
+    def get_tasks_for_run(self, run_id: str) -> list[ResearchTask]:
+        rows = self._conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE run_id = ?
+            ORDER BY priority ASC
+            """,
+            (run_id,),
+        ).fetchall()
+        return [self._row_to_task(row) for row in rows]
+
     def get_pending_count(self, run_id: Optional[str] = None) -> int:
         active_run_id = self._resolve_run_id(run_id)
         if active_run_id:
@@ -433,6 +444,23 @@ class TaskQueue:
             }
             for row in rows
         ]
+
+    def delete_run_data(self, run_id: str):
+        self._conn.execute(
+            """
+            DELETE FROM findings
+            WHERE task_id IN (
+                SELECT id FROM tasks WHERE run_id = ?
+            )
+            """,
+            (run_id,),
+        )
+        self._conn.execute("DELETE FROM tasks WHERE run_id = ?", (run_id,))
+        self._conn.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+        self._conn.commit()
+
+        if self.current_run_id == run_id:
+            self.current_run_id = None
 
     def close(self):
         if self._conn:

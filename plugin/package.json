@@ -1,6 +1,6 @@
 {
   "name": "opencode-nightshift",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Overnight autonomous research agent for OpenCode - analyzes codebases while you sleep",
   "type": "module",
   "main": "index.ts",
