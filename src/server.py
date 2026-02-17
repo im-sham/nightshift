@@ -14,6 +14,7 @@ from .diff_report import DiffReportGenerator
 from .github_issues import GitHubIssueCreator
 from .notifications import get_notification_manager
 from .scheduler import ScheduleManager
+from . import __version__
 
 
 DASHBOARD_HTML = Path(__file__).parent / "dashboard.html"
@@ -22,7 +23,7 @@ DASHBOARD_HTML = Path(__file__).parent / "dashboard.html"
 app = FastAPI(
     title="Nightshift API",
     description="Overnight autonomous research agent",
-    version="0.1.0"
+    version=__version__
 )
 
 
@@ -258,7 +259,7 @@ async def get_model_status():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "version": "0.1.0"}
+    return {"status": "healthy", "version": __version__}
 
 
 @app.get("/schedules")

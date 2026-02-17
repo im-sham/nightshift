@@ -36,17 +36,39 @@ def start(
         "--priority-mode", "-m",
         help="Task prioritization mode (defaults to config file value if set)",
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate config and show planned tasks without running OpenCode agents",
+    ),
 ):
     """Start a nightshift research run."""
-    from .runner import run_nightshift
+    from .runner import run_nightshift, run_nightshift_dry
     
     console.print(f"[bold green]Starting Nightshift[/bold green]")
     console.print(f"Projects: {', '.join(projects)}")
     console.print(f"Max duration: {duration if duration is not None else 'config default'}")
     console.print(f"Priority mode: {priority_mode if priority_mode is not None else 'config default'}")
+    if dry_run:
+        console.print("Mode: [yellow]dry run[/yellow]")
     console.print()
     
     try:
+        if dry_run:
+            summary = run_nightshift_dry(projects, duration, priority_mode=priority_mode)
+            table = Table(title="Nightshift Dry Run")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value")
+            table.add_row("Projects", ", ".join(summary.projects))
+            table.add_row("Planned tasks", str(summary.total_tasks))
+            table.add_row("Task types", ", ".join(summary.task_types))
+            table.add_row("Duration (hours)", str(summary.duration_hours))
+            table.add_row("Priority mode", summary.priority_mode)
+            table.add_row("Model chain", ", ".join(summary.model_chain) if summary.model_chain else "None discovered")
+            console.print(table)
+            console.print("[green]Dry run complete.[/green] No tasks were executed.")
+            return
+
         report = run_nightshift(projects, duration, priority_mode=priority_mode)
         console.print(f"\n[bold green]Nightshift completed![/bold green]")
         console.print(f"Tasks completed: {report.completed_tasks}")

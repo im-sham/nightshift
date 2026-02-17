@@ -1,0 +1,49 @@
+name: Smoke
+
+on:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      NIGHTSHIFT_DATA_DIR: ${{ runner.temp }}/nightshift-data
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Stub OpenCode models command
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          cat > "${RUNNER_TEMP}/bin/opencode" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [[ "${1:-}" == "models" ]]; then
+            printf "openai/gpt-5.2\n"
+            printf "google/antigravity-gemini-3-pro-high\n"
+            exit 0
+          fi
+          echo "opencode stub only supports: opencode models" >&2
+          exit 1
+          EOF
+          chmod +x "${RUNNER_TEMP}/bin/opencode"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Initialize config
+        run: nightshift init --force --no-add-current-project
+
+      - name: Run doctor
+        run: nightshift doctor
+
+      - name: Run dry-run smoke
+        run: nightshift start . --duration 0.1 --priority-mode quick_scan --dry-run

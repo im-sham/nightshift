@@ -17,6 +17,7 @@ from src.agent_client import OpencodeAgentClient
 from src.model_manager import ModelConfig
 from src.models import Finding, FindingSeverity, TaskType
 from src.runner import NightshiftRunner
+from src.runner import run_nightshift_dry
 from src.task_queue import TaskQueue
 import src.model_manager as model_manager
 
@@ -244,3 +245,27 @@ def test_model_discovery_and_auto_chain(monkeypatch):
     keys = [f"{m.provider}/{m.model_id}" for m in manager.models]
     assert keys
     assert keys[0] == "openai/gpt-5.2"
+
+
+def test_dry_run_creates_plan_without_persisting_tasks(tmp_path, monkeypatch):
+    data_dir = tmp_path / "nightshift-data"
+    project_path = tmp_path / "project"
+    project_path.mkdir()
+
+    monkeypatch.setenv("NIGHTSHIFT_DATA_DIR", str(data_dir))
+
+    summary = run_nightshift_dry(
+        [str(project_path)],
+        duration_hours=0.5,
+        priority_mode="quick_scan",
+    )
+
+    assert summary.projects == ["project"]
+    assert summary.total_tasks == 11
+    assert "security_review" in summary.task_types
+    assert summary.priority_mode == "quick_scan"
+
+    queue = TaskQueue(NightshiftConfig(projects=[]))
+    assert queue.get_latest_run_id() is None
+    assert queue.get_pending_count() == 0
+    queue.close()

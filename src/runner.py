@@ -188,6 +188,27 @@ class NightshiftRunner:
         prioritized_tasks = prioritizer.prioritize_tasks(tasks)
         self.task_queue.update_task_priorities(prioritized_tasks)
 
+    def preview(self) -> "NightshiftDryRun":
+        if not self.run_id:
+            self.setup_tasks()
+
+        tasks = self.task_queue.get_tasks_for_run(self.run_id)
+        task_types = sorted({task.task_type.value for task in tasks})
+        model_chain = [f"{model.provider}/{model.model_id}" for model in self.model_manager.models]
+
+        summary = NightshiftDryRun(
+            projects=[project.name for project in self.config.projects],
+            total_tasks=len(tasks),
+            task_types=task_types,
+            model_chain=model_chain,
+            duration_hours=self.config.max_duration_hours,
+            priority_mode=self.config.priority_mode,
+        )
+
+        self.task_queue.delete_run_data(self.run_id)
+        self.run_id = ""
+        return summary
+
     def run(self) -> NightshiftReport:
         self.start_time = time.time()
         if not self.run_id:
@@ -371,6 +392,16 @@ class RateLimitError(Exception):
     pass
 
 
+@dataclass
+class NightshiftDryRun:
+    projects: list[str]
+    total_tasks: int
+    task_types: list[str]
+    model_chain: list[str]
+    duration_hours: float
+    priority_mode: str
+
+
 def run_nightshift(
     projects: list[str],
     duration_hours: Optional[float] = None,
@@ -381,3 +412,18 @@ def run_nightshift(
     config = get_config(projects, duration_hours, priority_mode=priority_mode)
     runner = NightshiftRunner(config)
     return runner.run()
+
+
+def run_nightshift_dry(
+    projects: list[str],
+    duration_hours: Optional[float] = None,
+    priority_mode: Optional[str] = None,
+) -> NightshiftDryRun:
+    from .config import get_config
+
+    config = get_config(projects, duration_hours, priority_mode=priority_mode)
+    runner = NightshiftRunner(config)
+    try:
+        return runner.preview()
+    finally:
+        runner.task_queue.close()
