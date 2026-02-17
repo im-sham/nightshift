@@ -1,12 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 from pathlib import Path
 import threading
 
-from .config import get_config, NightshiftConfig, DEFAULT_PROJECTS
+from .config import get_config, NightshiftConfig, get_default_project_aliases, get_preferred_models
 from .runner import NightshiftRunner
 from .report_generator import ReportGenerator
 from .model_manager import create_default_manager
@@ -45,6 +45,7 @@ class RunStatus(BaseModel):
     total_findings: int
     current_task: Optional[str]
     models_status: dict
+    recent_failures: list[dict] = Field(default_factory=list)
 
 
 class ScheduleRequest(BaseModel):
@@ -177,7 +178,8 @@ async def get_status():
             pending_tasks=0,
             total_findings=0,
             current_task=None,
-            models_status={}
+            models_status={},
+            recent_failures=[],
         )
     
     queue = _current_runner.task_queue
@@ -196,7 +198,8 @@ async def get_status():
         pending_tasks=stats.get("pending", 0),
         total_findings=len(queue.get_all_findings(run_id=_current_runner.run_id)),
         current_task=None,
-        models_status=_current_runner.model_manager.get_status()
+        models_status=_current_runner.model_manager.get_status(),
+        recent_failures=queue.get_failed_tasks(run_id=_current_runner.run_id, limit=10),
     )
 
 
@@ -241,14 +244,15 @@ async def list_reports():
 
 @app.get("/projects")
 async def list_available_projects():
+    project_aliases = get_default_project_aliases()
     return {
-        "configured": {k: str(v) for k, v in DEFAULT_PROJECTS.items()},
+        "configured": {k: str(v) for k, v in project_aliases.items()},
     }
 
 
 @app.get("/models")
 async def get_model_status():
-    manager = create_default_manager()
+    manager = create_default_manager(preferred_models=get_preferred_models())
     return manager.get_status()
 
 

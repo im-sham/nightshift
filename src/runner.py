@@ -175,7 +175,7 @@ class NightshiftRunner:
 
     def __post_init__(self):
         self.task_queue = TaskQueue(self.config)
-        self.model_manager = create_default_manager()
+        self.model_manager = create_default_manager(preferred_models=self.config.models)
         self.report_generator = ReportGenerator(self.config.reports_dir)
 
     def setup_tasks(self):
@@ -350,10 +350,12 @@ class NightshiftRunner:
             total_tokens=stats.get("total_tokens", 0),
             models_used=self.task_queue.get_models_used(run_id=self.run_id),
         )
+        failed_tasks = self.task_queue.get_failed_tasks(run_id=self.run_id, limit=100)
 
         report_path = self.report_generator.generate(
             report,
             open_browser=self.config.open_report_in_browser,
+            failed_tasks=failed_tasks,
         )
         diff_report = DiffReportGenerator(self.config)
         diff_report.record_run(self.run_id, report.all_findings)
@@ -371,8 +373,8 @@ class RateLimitError(Exception):
 
 def run_nightshift(
     projects: list[str],
-    duration_hours: float = 8.0,
-    priority_mode: str = "balanced",
+    duration_hours: Optional[float] = None,
+    priority_mode: Optional[str] = None,
 ) -> NightshiftReport:
     from .config import get_config
 
