@@ -39,6 +39,15 @@ body:
       required: true
 
   - type: textarea
+    id: doctor_output
+    attributes:
+      label: "`nightshift doctor` output"
+      description: "Run `nightshift doctor` and paste the full output."
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
     id: env
     attributes:
       label: Environment
@@ -46,8 +55,9 @@ body:
       placeholder: |
         - OS:
         - Python:
-        - OpenCode:
-        - Nightshift:
+        - OpenCode CLI version:
+        - Nightshift version or commit:
+        - Install method (pip editable, pip, fork, etc.):
     validations:
       required: true
 
@@ -57,3 +67,5 @@ body:
       label: Logs / output
       description: Paste relevant logs, stack traces, and command output.
       render: shell
+    validations:
+      required: true

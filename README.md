@@ -5,6 +5,22 @@ Nightshift is an overnight autonomous research agent designed for **OpenCode**. 
 [![npm version](https://img.shields.io/npm/v/nightshift-plugin.svg)](https://www.npmjs.com/package/nightshift-plugin)
 [![Python version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
+## Project Status
+
+Nightshift is currently in **maintenance mode**.
+
+- This repository is stable for community use, forks, and experimentation.
+- New feature development is not on an active roadmap.
+- Issue triage and PR review are best-effort with no guaranteed response SLA.
+
+## Compatibility Notes
+
+`v0.2.0` (released February 17, 2026) is the baseline community release.
+
+- Validated against the OpenCode CLI integration surface used by Nightshift (`opencode models` and `opencode run`) as of this release date.
+- Future OpenCode CLI changes may require community patches.
+- For setup verification, run `nightshift doctor` and `nightshift start . --dry-run` before full runs.
+
 ## Features
 
 - **Autonomous Research**: Deep dives into codebases without manual intervention.

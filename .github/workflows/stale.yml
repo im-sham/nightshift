@@ -1,0 +1,33 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark and close stale threads
+        uses: actions/stale@v9
+        with:
+          stale-issue-message: "This issue has been automatically marked stale due to inactivity. It will be closed in 14 days unless there is new activity."
+          close-issue-message: "Closing as stale due to inactivity. Comment with updated reproduction details to reopen."
+          days-before-issue-stale: 45
+          days-before-issue-close: 14
+          stale-pr-message: "This pull request has been automatically marked stale due to inactivity. It will be closed in 21 days unless there is new activity."
+          close-pr-message: "Closing as stale due to inactivity. Reopen or open a fresh PR if work resumes."
+          days-before-pr-stale: 60
+          days-before-pr-close: 21
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          exempt-issue-labels: "security,pinned,keep-open"
+          exempt-pr-labels: "security,pinned,keep-open"
+          exempt-draft-pr: true
+          remove-stale-when-updated: true
+          operations-per-run: 200

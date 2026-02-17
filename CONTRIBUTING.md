@@ -2,6 +2,14 @@
 
 Thanks for contributing.
 
+## Maintenance Mode Expectations
+
+Nightshift is in maintenance mode as of `v0.2.0` (February 17, 2026).
+
+- Contributions are welcome, especially bug fixes, compatibility fixes, and documentation improvements.
+- Maintainer review is best-effort and may be delayed.
+- There is no guaranteed merge timeline or support SLA.
+
 ## Local Setup
 
 ```bash
@@ -35,6 +43,7 @@ cd plugin && bun run typecheck
 - Include validation notes (tests/checks run).
 - Update docs when behavior or interfaces change.
 - Prefer portable paths and avoid user-specific absolute paths.
+- Include compatibility context when relevant (OpenCode CLI behavior changes, model command changes, etc.).
 
 ## Branch Naming
 
