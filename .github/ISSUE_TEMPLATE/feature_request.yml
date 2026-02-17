@@ -3,6 +3,11 @@ description: Propose an improvement for users or contributors.
 title: "[feature] "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Nightshift is in maintenance mode. Feature requests with a clear implementation path and contributor ownership are the most likely to ship.
+
   - type: textarea
     id: problem
     attributes:
@@ -30,3 +35,10 @@ body:
       label: Impact
       description: Who benefits and how?
       placeholder: Users, contributors, maintainers, etc.
+
+  - type: textarea
+    id: ownership
+    attributes:
+      label: Contribution plan (optional)
+      description: If you can contribute this, outline scope/timeline so maintainers can prioritize review.
+      placeholder: I can open a PR that covers...
