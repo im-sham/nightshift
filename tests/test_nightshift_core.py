@@ -2,6 +2,7 @@ from pathlib import Path
 
 from src.config import NightshiftConfig, ProjectConfig, _project_path_from_env_or_default
 from src.diff_report import DiffReportGenerator
+from src.agent_client import OpencodeAgentClient
 from src.model_manager import ModelConfig
 from src.models import Finding, FindingSeverity, TaskType
 from src.runner import NightshiftRunner
@@ -141,3 +142,23 @@ def test_project_path_helper_honors_env_override(monkeypatch):
         Path("/default/path"),
     )
     assert str(resolved).endswith("custom/ops")
+
+
+def test_opencode_run_output_parser_and_subagent_mapping():
+    client = OpencodeAgentClient(opencode_path="opencode")
+
+    stream = (
+        '{"type":"step_start","part":{"type":"step-start"}}\n'
+        '{"type":"text","part":{"text":"["}}\n'
+        '{"type":"text","part":{"text":"]"}}\n'
+        '{"type":"step_finish","part":{"type":"step-finish"}}\n'
+    )
+    assert client._parse_run_output(stream) == "[]"
+
+    cmd = client._build_run_command(
+        agent_type="explore",
+        prompt="Analyze this",
+        model="openai/gpt-5",
+    )
+    assert "--agent" not in cmd
+    assert "--model" in cmd
