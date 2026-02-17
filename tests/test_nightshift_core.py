@@ -1,12 +1,24 @@
 from pathlib import Path
+import subprocess
 
-from src.config import NightshiftConfig, ProjectConfig, _project_path_from_env_or_default
+from src.config import (
+    NightshiftConfig,
+    ProjectConfig,
+    _project_path_from_env_or_default,
+    get_config_defaults,
+    get_default_project_aliases,
+    get_preferred_models,
+    get_config,
+    load_user_config,
+    render_default_config_toml,
+)
 from src.diff_report import DiffReportGenerator
 from src.agent_client import OpencodeAgentClient
 from src.model_manager import ModelConfig
 from src.models import Finding, FindingSeverity, TaskType
 from src.runner import NightshiftRunner
 from src.task_queue import TaskQueue
+import src.model_manager as model_manager
 
 
 def _make_config(tmp_path: Path, priority_mode: str = "balanced") -> NightshiftConfig:
@@ -162,3 +174,73 @@ def test_opencode_run_output_parser_and_subagent_mapping():
     )
     assert "--agent" not in cmd
     assert "--model" in cmd
+
+
+def test_config_file_defaults_and_aliases(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        """
+[defaults]
+duration_hours = 4.5
+priority_mode = "security_first"
+open_report_in_browser = false
+
+[projects]
+sample_repo = "/tmp/sample-repo"
+
+[models]
+preferred = ["openai/gpt-5.2", "google/gemini-3-pro-high"]
+"""
+    )
+
+    monkeypatch.setenv("NIGHTSHIFT_CONFIG_FILE", str(config_file))
+    loaded = load_user_config()
+    defaults = get_config_defaults(loaded)
+    aliases = get_default_project_aliases(user_config=loaded)
+    preferred_models = get_preferred_models(user_config=loaded)
+
+    assert defaults["duration_hours"] == 4.5
+    assert defaults["priority_mode"] == "security_first"
+    assert defaults["open_report_in_browser"] is False
+    assert aliases["sample_repo"] == Path("/tmp/sample-repo")
+    assert [f"{m.provider}/{m.model_id}" for m in preferred_models] == [
+        "openai/gpt-5.2",
+        "google/gemini-3-pro-high",
+    ]
+
+    cfg = get_config(["sample_repo"])
+    assert cfg.max_duration_hours == 4.5
+    assert cfg.priority_mode == "security_first"
+    assert cfg.open_report_in_browser is False
+    assert cfg.projects[0].name == "sample_repo"
+
+
+def test_render_default_config_toml_includes_sanitized_current_project(tmp_path):
+    content = render_default_config_toml(tmp_path / "my cool project")
+    assert "[defaults]" in content
+    assert "my_cool_project" in content
+
+
+def test_model_discovery_and_auto_chain(monkeypatch):
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout="openai/gpt-5.2\nopenai/gpt-5-nano\ngoogle/gemini-3-pro-high\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(model_manager.subprocess, "run", fake_run)
+    model_manager._MODEL_DISCOVERY_CACHE["timestamp"] = 0
+    model_manager._MODEL_DISCOVERY_CACHE["models"] = []
+
+    discovered = model_manager.discover_available_model_ids(refresh=True)
+    assert "openai/gpt-5.2" in discovered
+
+    manager = model_manager.create_default_manager(
+        preferred_models=[ModelConfig("google", "nonexistent-model", priority=1)],
+        use_discovery=True,
+    )
+    keys = [f"{m.provider}/{m.model_id}" for m in manager.models]
+    assert keys
+    assert keys[0] == "openai/gpt-5.2"

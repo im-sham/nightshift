@@ -8,13 +8,14 @@ Nightshift is an overnight autonomous research agent designed for **OpenCode**. 
 ## Features
 
 - **Autonomous Research**: Deep dives into codebases without manual intervention.
-- **Multi-Model Failover**: Intelligent failover chain across Claude Opus, GPT-5, and Gemini models to bypass rate limits and optimize performance.
+- **Multi-Model Failover**: Automatically discovers available OpenCode models and builds a resilient fallback chain.
 - **Comprehensive Reports**: Generates detailed HTML research reports and differential reports comparing changes between runs.
 - **OpenCode Integration**: A dedicated plugin that lets you control Nightshift directly from your editor.
 - **Smart Scheduling**: Built-in support for daily research tasks using cron or macOS launchd.
 - **GitHub Integration**: Automatically creates issues for critical findings.
 - **Notifications**: Real-time alerts via Slack or custom webhooks.
 - **Web Dashboard**: Interactive dashboard for monitoring runs and viewing findings.
+- **Setup UX**: Built-in `nightshift init` and `nightshift doctor` commands for first-run setup and troubleshooting.
 
 ## Installation
 
@@ -40,17 +41,27 @@ To load the plugin in OpenCode, point your plugin configuration to the `plugin/i
 
 ## Quick Start
 
-1. **Start the API Server**:
+1. **Initialize local config**:
+   ```bash
+   nightshift init
+   ```
+
+2. **Validate setup**:
+   ```bash
+   nightshift doctor
+   ```
+
+3. **Start the API Server**:
    ```bash
    nightshift serve
    ```
 
-2. **Run a Research Task**:
+4. **Run a Research Task**:
    ```bash
-   nightshift start opsorchestra ghost-sentry --duration 8.0
+   nightshift start opsorchestra --duration 8.0
    ```
 
-3. **View the Report**:
+5. **View the Report**:
    ```bash
    nightshift report
    ```
@@ -60,6 +71,8 @@ To load the plugin in OpenCode, point your plugin configuration to the `plugin/i
 The `nightshift` command provides several subcommands:
 
 - `start [PROJECTS]...`: Start a research run on specified projects or paths.
+- `init`: Create a starter `config.toml` in your Nightshift data directory.
+- `doctor`: Validate OpenCode/GitHub/config/dependency setup and show fix hints.
 - `serve`: Start the HTTP API server (default port: 7890).
 - `status`: Show current run status and model availability.
 - `report`: Open the latest research report in your browser.
@@ -109,18 +122,50 @@ curl http://127.0.0.1:7890/status
 
 Nightshift stores its data in `~/.nightshift`.
 
+### Config File
+
+Nightshift reads optional user config from:
+
+- `~/.nightshift/config.toml`
+- or `NIGHTSHIFT_CONFIG_FILE` if set
+
+Create a starter config with:
+
+```bash
+nightshift init
+```
+
+Example:
+
+```toml
+[defaults]
+duration_hours = 8.0
+priority_mode = "balanced"
+open_report_in_browser = true
+
+[projects]
+backend = "/path/to/backend"
+frontend = "/path/to/frontend"
+
+[models]
+preferred = ["openai/gpt-5.2", "google/antigravity-gemini-3-pro-high"]
+```
+
 ### Environment Variables
 - `NIGHTSHIFT_DATA_DIR`: Override the default data directory.
+- `NIGHTSHIFT_CONFIG_FILE`: Override the default config path.
 - `NIGHTSHIFT_PROJECT_OPSORCHESTRA`: Override default path for the `opsorchestra` alias.
 - `NIGHTSHIFT_PROJECT_GHOST_SENTRY`: Override default path for the `ghost-sentry` alias.
 - `SLACK_WEBHOOK_URL`: Default webhook for notifications.
 
-### Model Failover Chain
-Nightshift automatically cycles through the following models:
-1. Claude 4.5 Thinking (High)
-2. GPT-5.2
-3. Gemini 3 Pro (High)
-4. Gemini 3 Flash
+See `.env.example` for a complete starter environment file.
+
+### Model Selection
+
+Nightshift tries to:
+1. Use preferred models from `config.toml` (if set).
+2. Keep only models available in your current OpenCode environment.
+3. Auto-rank discovered models when preferred models are unavailable.
 
 ## Architecture
 
@@ -128,6 +173,13 @@ Nightshift consists of three main components:
 1. **Core Engine (Python)**: Handles the task queue, model management, and research logic.
 2. **API Server (FastAPI)**: Provides a bridge between the core engine and external tools.
 3. **OpenCode Plugin (TypeScript)**: Exposes research tools directly within the developer environment.
+
+For deeper implementation details, see `ARCHITECTURE.md`.
+
+## Contributing
+
+Forks and external contributions are welcome.
+See `CONTRIBUTING.md` for local setup, dev commands, and PR expectations.
 
 ---
 Built for autonomous engineering.

@@ -279,6 +279,37 @@
         .log-time { color: var(--text-secondary); }
         .log-message { color: var(--text-primary); }
         
+        .failures-panel {
+            margin-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 0.75rem;
+        }
+        
+        .failure-entry {
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--danger);
+            border-radius: 4px;
+            padding: 0.6rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .failure-entry:last-child { margin-bottom: 0; }
+        
+        .failure-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+        }
+        
+        .failure-error {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            max-height: 4.8rem;
+            overflow: hidden;
+        }
+        
         .empty-state {
             text-align: center;
             padding: 2rem;
@@ -391,6 +422,10 @@
                     <label>Run ID</label>
                     <div id="runId" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary);">--</div>
                 </div>
+                <div id="failuresPanel" class="failures-panel" style="display: none;">
+                    <label>Recent Failures</label>
+                    <div id="failuresList"></div>
+                </div>
             </div>
             
             <div class="card">
@@ -474,6 +509,21 @@
                 document.getElementById('findings').textContent = data.total_findings || 0;
                 document.getElementById('elapsedTime').textContent = data.elapsed_minutes ? `${data.elapsed_minutes} min` : '--';
                 document.getElementById('runId').textContent = data.run_id || '--';
+
+                const failuresPanel = document.getElementById('failuresPanel');
+                const failuresList = document.getElementById('failuresList');
+                if (data.recent_failures && data.recent_failures.length > 0) {
+                    failuresPanel.style.display = 'block';
+                    failuresList.innerHTML = data.recent_failures.map(f => `
+                        <div class="failure-entry">
+                            <div class="failure-title">${f.task_type} (${f.project_name})</div>
+                            <div class="failure-error">${(f.error || 'Unknown error').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    failuresPanel.style.display = 'none';
+                    failuresList.innerHTML = '';
+                }
                 
                 const startBtn = document.getElementById('startBtn');
                 const stopBtn = document.getElementById('stopBtn');

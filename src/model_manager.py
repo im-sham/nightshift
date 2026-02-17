@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 import time
-import httpx
+import subprocess
 
 from .config import ModelConfig
 
@@ -73,12 +73,122 @@ class ModelFailoverManager:
         return self.get_available_model() is None
 
 
-def create_default_manager() -> ModelFailoverManager:
+DEFAULT_MODEL_CHAIN = [
+    ModelConfig("google", "antigravity-claude-opus-4-5-thinking-high", priority=1),
+    ModelConfig("openai", "gpt-5.2", priority=2),
+    ModelConfig("google", "antigravity-gemini-3-pro-high", priority=3),
+    ModelConfig("google", "antigravity-gemini-3-flash", priority=4),
+]
+
+_MODEL_DISCOVERY_CACHE = {
+    "timestamp": 0.0,
+    "models": [],
+}
+
+
+def discover_available_model_ids(
+    opencode_path: str = "opencode",
+    ttl_seconds: int = 300,
+    refresh: bool = False,
+) -> list[str]:
+    now = time.time()
+    if not refresh and _MODEL_DISCOVERY_CACHE["models"] and (now - _MODEL_DISCOVERY_CACHE["timestamp"] < ttl_seconds):
+        return list(_MODEL_DISCOVERY_CACHE["models"])
+
+    try:
+        result = subprocess.run(
+            [opencode_path, "models"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:
+        return list(_MODEL_DISCOVERY_CACHE["models"])
+
+    if result.returncode != 0:
+        return list(_MODEL_DISCOVERY_CACHE["models"])
+
+    models = [line.strip() for line in result.stdout.splitlines() if "/" in line]
+    if models:
+        _MODEL_DISCOVERY_CACHE["models"] = models
+        _MODEL_DISCOVERY_CACHE["timestamp"] = now
+
+    return list(_MODEL_DISCOVERY_CACHE["models"])
+
+
+def _score_discovered_model(identifier: str) -> int:
+    model_lower = identifier.lower()
+    provider = identifier.split("/", 1)[0]
+
+    score = {
+        "openai": 35,
+        "anthropic": 30,
+        "google": 28,
+        "opencode": 20,
+    }.get(provider, 10)
+
+    if any(token in model_lower for token in ("embedding", "image", "audio", "tts", "live")):
+        score -= 50
+    if "preview" in model_lower:
+        score -= 10
+    if any(token in model_lower for token in ("opus", "pro", "gpt-5", "claude-sonnet", "gemini-3-pro")):
+        score += 20
+    if any(token in model_lower for token in ("nano", "lite", "flash", "haiku", "free")):
+        score -= 5
+
+    return score
+
+
+def _build_fallback_chain_from_available(available_model_ids: list[str], limit: int = 4) -> list[ModelConfig]:
+    ranked = sorted(
+        available_model_ids,
+        key=lambda identifier: (_score_discovered_model(identifier), identifier),
+        reverse=True,
+    )
+
+    selected: list[ModelConfig] = []
+    for identifier in ranked:
+        if "/" not in identifier:
+            continue
+        provider, model_id = identifier.split("/", 1)
+        selected.append(ModelConfig(provider=provider, model_id=model_id, priority=len(selected) + 1))
+        if len(selected) >= limit:
+            break
+
+    return selected
+
+
+def _normalize_priorities(models: list[ModelConfig]) -> list[ModelConfig]:
+    normalized: list[ModelConfig] = []
+    for index, model in enumerate(models, start=1):
+        normalized.append(ModelConfig(model.provider, model.model_id, priority=index))
+    return normalized
+
+
+def create_default_manager(
+    preferred_models: Optional[list[ModelConfig]] = None,
+    use_discovery: bool = True,
+) -> ModelFailoverManager:
+    preferred = preferred_models or DEFAULT_MODEL_CHAIN
+
+    if not use_discovery:
+        return ModelFailoverManager(models=_normalize_priorities(preferred))
+
+    available = discover_available_model_ids()
+    if not available:
+        return ModelFailoverManager(models=_normalize_priorities(preferred))
+
+    available_set = set(available)
+    discovered_preferred: list[ModelConfig] = []
+    for model in preferred:
+        model_key = f"{model.provider}/{model.model_id}"
+        if model_key in available_set:
+            discovered_preferred.append(model)
+
+    final_models = discovered_preferred or _build_fallback_chain_from_available(available)
+    if not final_models:
+        final_models = list(preferred)
+
     return ModelFailoverManager(
-        models=[
-            ModelConfig("google", "antigravity-claude-opus-4-5-thinking-high", priority=1),
-            ModelConfig("openai", "gpt-5.2", priority=2),
-            ModelConfig("google", "antigravity-gemini-3-pro-high", priority=3),
-            ModelConfig("google", "antigravity-gemini-3-flash", priority=4),
-        ]
+        models=_normalize_priorities(final_models)
     )

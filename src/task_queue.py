@@ -396,6 +396,44 @@ class TaskQueue:
         ).fetchall()
         return [row["model_used"] for row in rows]
 
+    def get_failed_tasks(self, run_id: Optional[str] = None, limit: int = 50) -> list[dict]:
+        active_run_id = self._resolve_run_id(run_id)
+        if active_run_id:
+            rows = self._conn.execute(
+                """
+                SELECT id, task_type, project_name, error, model_used, started_at, completed_at
+                FROM tasks
+                WHERE status = 'failed' AND run_id = ?
+                ORDER BY completed_at DESC
+                LIMIT ?
+                """,
+                (active_run_id, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT id, task_type, project_name, error, model_used, started_at, completed_at
+                FROM tasks
+                WHERE status = 'failed'
+                ORDER BY completed_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
+        return [
+            {
+                "id": row["id"],
+                "task_type": row["task_type"],
+                "project_name": row["project_name"],
+                "error": row["error"],
+                "model_used": row["model_used"],
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+            }
+            for row in rows
+        ]
+
     def close(self):
         if self._conn:
             self._conn.close()
